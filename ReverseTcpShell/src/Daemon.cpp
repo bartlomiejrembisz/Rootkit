@@ -4,9 +4,11 @@ Daemon::Daemon(const PortId port) :
     m_ioContext(),
     m_acceptor(m_ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port))
 {
+    //! Set the address reuse socket option.
     const asio::socket_base::reuse_address reuseAddressOption(true);
     m_acceptor.set_option(reuseAddressOption);
     
+    //! Start accepting new connections.
     StartAccept();
 }
 

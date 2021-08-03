@@ -7,6 +7,12 @@
 
 std::unique_ptr<Daemon> g_pDaemon;
 
+/*
+ *  @brief  The SIGINT (Ctrl+c) signal handler.
+ *          Clean up the connections and quit.
+ *
+ *  @param  signal the signal id.
+ */
 void SigIntHandler(int signal)
 {
     std::cerr << "\nCaught SIGINT, exiting...\n";
@@ -16,6 +22,7 @@ void SigIntHandler(int signal)
 
 int main(int argc, char** argv)
 {
+    //! Require root priviledges.
     if (getuid() != 0)
     {
         std::cerr << "Daemon requires root privilege\n";

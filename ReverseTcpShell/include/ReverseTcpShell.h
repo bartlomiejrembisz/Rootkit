@@ -8,26 +8,61 @@
 namespace Task
 {
 
+/*
+ *  @brief  The reverse tcp shell task class.
+ *          Responsible for setting up the shell process and redirecting
+ *          the standard IO file descriptors to the socket.
+ */
 class ReverseTcpShell
 {
 public:
-    typedef asio::local::stream_protocol::socket UnixSocket;
+    typedef asio::local::stream_protocol::socket UnixSocket;        ///< The asio unix socket wrapper typedef.
 
+    /*
+     *  @brief  Constructor.
+     *
+     *  @param  ioContext the asio io execution context.
+     */
     ReverseTcpShell(asio::io_context &ioContext);
 
+    //! Destructor
     ~ReverseTcpShell();
 
+    /*
+     *  @brief  Start the reverse shell.
+     *          Start the child process, redirect the standard IO
+     *          file descriptors to the appropriate socket, set the
+     *          appropriate shell variables and start the new shell.
+     *
+     *  @return whether the shell start completed successfully.
+     */
     bool Start();
 
+    /*
+     *  @brief  Get the parent socket.
+     *
+     *  @return the parent socket object reference.
+     */
     UnixSocket &GetParentSocket();
+
+    /*
+     *  @brief  Get the child shell process id.
+     *
+     *  @return the child shell process id.
+     */
     pid_t GetShellPid() const;
 
+    /*
+     *  @brief  Check whether the shell child process has terminated.
+     *
+     *  @return whether the shell terminated.
+     */
     bool HasShellTerminated() const;
 
 private:
-    UnixSocket  m_parentSocket;
-    UnixSocket  m_childSocket;
-    pid_t       m_shellPid;     ///< The pid of the shell.
+    UnixSocket  m_parentSocket; ///< The parent asio Unix socket wrapper.
+    UnixSocket  m_childSocket;  ///< The child asio Unix socket wrapper.
+    pid_t       m_shellPid;     ///< The process id of the child shell.
 };
 
 } // namespace Task
