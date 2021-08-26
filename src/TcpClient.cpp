@@ -1,4 +1,6 @@
-#include "TcpClient.h"
+#include <TcpClient.h>
+
+#include <ReverseTcpShell.h>
 
 #include <iterator>
 #include <sstream>
@@ -76,13 +78,13 @@ void TcpClient::Start()
     if (!m_pReverseTcpShellTask->Start())
     {
         //! Close connection if the tcp shell fails to start.
-        std::cout << ConnectionString(m_socket) << " - unable to start shell." << '\n';
+        std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - unable to start shell." << '\n';
 
         Cancel();
     }
     else
     {
-        std::cout << ConnectionString(m_socket) << " - started shell." << '\n';
+        std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - started shell." << '\n';
         
         //! Start the child shell process watchdog timer.
         m_childWatchTimer.async_wait(std::bind(&TcpClient::CheckShellAlive, shared_from_this(), std::placeholders::_1));
@@ -106,7 +108,7 @@ void TcpClient::OnWriteToSocket(const asio::error_code &error, const size_t nByt
 {
     if (error)
     {
-        std::cout << ConnectionString(m_socket) << " - OnWriteToSocket error: " << error.message() << '\n';
+        std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - OnWriteToSocket error: " << error.message() << '\n';
         return;
     }
 }
@@ -122,7 +124,7 @@ void TcpClient::OnReadFromSocket(const asio::error_code &error, const size_t nBy
     if (error)
     {
         if (asio::error::operation_aborted != error.value())
-            std::cout << ConnectionString(m_socket) << " - OnReadFromSocket error: " << error.message() << '\n';
+            std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - OnReadFromSocket error: " << error.message() << '\n';
 
         return;
     }
@@ -148,7 +150,7 @@ void TcpClient::OnWriteToShell(const asio::error_code &error, const size_t nByte
 {
     if (error)
     {
-        std::cout << ConnectionString(m_socket) << " - OnWriteToShell error=" << error.message() << '\n';
+        std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - OnWriteToShell error=" << error.message() << '\n';
         return;
     }
 }
@@ -164,7 +166,7 @@ void TcpClient::OnReadFromShell(const asio::error_code &error, const size_t nByt
     if (error)
     {
         if (asio::error::operation_aborted != error.value())
-            std::cout << ConnectionString(m_socket) << " - OnReadFromShell error=" << error.message() << '\n';
+            std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - OnReadFromShell error=" << error.message() << '\n';
 
         return;
     }
@@ -190,14 +192,33 @@ void TcpClient::CheckShellAlive(const asio::error_code &error)
         return;
     }
 
-    if (m_pReverseTcpShellTask->HasShellTerminated())
+    const auto shellState = m_pReverseTcpShellTask->HasShellTerminated();
+    if (shellState.first)
     {
         //! Child terminated.
 
         //! If the child process has exited, cancel all the scheduled asio io operations
         //! and close the connection.
-        std::cout << ConnectionString(m_socket) << " - shell child terminated, pid=" << m_pReverseTcpShellTask->GetShellPid() << '\n';
-        
+        std::cout << "reversetcpd: " << ConnectionString(m_socket) << " - shell pid="
+            << m_pReverseTcpShellTask->GetShellPid() << " ";
+
+        if (WIFEXITED(shellState.second))
+        {
+            std::cout << "exited, exit status=" << WEXITSTATUS(shellState.second);
+        }
+        else if (WIFSIGNALED(shellState.second))
+        {
+            const int signal = WTERMSIG(shellState.second);
+            std::cout << "was signaled, signal=" << signal << " - " << strsignal(signal);
+        }
+        else if (WIFSTOPPED(shellState.second))
+        {
+            const int signal = WSTOPSIG(shellState.second);
+            std::cout << "was stopped, signal=" << signal << " - " << strsignal(signal);
+        }
+
+        std::cout << '\n';
+
         Cancel();
     }
     else

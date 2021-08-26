@@ -11,7 +11,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
-#define ASIO_STANDALONE
 #include <asio.hpp>
 
 #include <atomic>
@@ -27,6 +26,8 @@
 #include <stdlib.h>
 #include <system_error>
 #include <unistd.h>
+
+#define DEFAULT_PATH "/usr/bin:/usr/sbin:/system/bin:/system/xbin:/vendor/bin"
 
 #include <stdio.h>
 #define LOG(fmt, ...) do { fprintf(stderr, "%s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)

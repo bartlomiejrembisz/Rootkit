@@ -3,10 +3,11 @@
 
 #include <Common.h>
 
-#include <ReverseTcpShell.h>
-
 #include <thread>
 #include <memory>
+
+//! Forward declare.
+namespace Task { class ReverseTcpShell; }
 
 /*
  *  @brief  The tcp client manager object.

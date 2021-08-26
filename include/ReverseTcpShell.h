@@ -18,6 +18,9 @@ class ReverseTcpShell
 public:
     typedef asio::local::stream_protocol::socket UnixSocket;        ///< The asio unix socket wrapper typedef.
 
+    static const std::string SHELL;
+    static const std::string PATH;
+
     /*
      *  @brief  Constructor.
      *
@@ -55,9 +58,10 @@ public:
     /*
      *  @brief  Check whether the shell child process has terminated.
      *
-     *  @return whether the shell terminated.
+     *  @return whether the shell terminated (first) and status code (second).
+     *          status code is only initialized when the child terminates.
      */
-    bool HasShellTerminated() const;
+    std::pair<bool, int> HasShellTerminated() const;
 
 private:
     UnixSocket  m_parentSocket; ///< The parent asio Unix socket wrapper.
